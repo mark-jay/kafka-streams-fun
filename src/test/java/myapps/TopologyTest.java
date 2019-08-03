@@ -1,16 +1,18 @@
 package myapps;
 
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.*;
-import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.common.serialization.LongSerializer;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.TopologyTestDriver;
-import org.apache.kafka.streams.kstream.*;
-import org.apache.kafka.streams.processor.StateStore;
-import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
 import org.apache.kafka.streams.test.ConsumerRecordFactory;
 import org.junit.Assert;
 import org.junit.Test;
@@ -38,13 +40,13 @@ public class TopologyTest {
             ConsumerRecordFactory<String, Long> factory = new ConsumerRecordFactory<>(
                     INPUT_TOPIC, new StringSerializer(), new LongSerializer());
 
-            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 1l));
-            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 2l));
-            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 3l));
+            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 1L));
+            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 2L));
+            testDriver.pipeInput(factory.create(INPUT_TOPIC, "key", 3L));
 
-            ProducerRecord<String, String> pr1 = testDriver.readOutput("output-topic", new StringDeserializer(), new StringDeserializer());
-            ProducerRecord<String, String> pr2 = testDriver.readOutput("output-topic", new StringDeserializer(), new StringDeserializer());
-            ProducerRecord<String, String> pr3 = testDriver.readOutput("output-topic", new StringDeserializer(), new StringDeserializer());
+            ProducerRecord<String, String> pr1 = testDriver.readOutput(OUTPUT_TOPIC, new StringDeserializer(), new StringDeserializer());
+            ProducerRecord<String, String> pr2 = testDriver.readOutput(OUTPUT_TOPIC, new StringDeserializer(), new StringDeserializer());
+            ProducerRecord<String, String> pr3 = testDriver.readOutput(OUTPUT_TOPIC, new StringDeserializer(), new StringDeserializer());
 
             Assert.assertEquals("1,1", pr1.value());
             Assert.assertEquals("2,3", pr2.value());
@@ -54,15 +56,15 @@ public class TopologyTest {
 
     private Topology createTopology() {
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, Long> stream = builder.stream(INPUT_TOPIC);
+        KStream<String, Long> inputStream = builder.stream(INPUT_TOPIC);
 
-        KTable<String, Long> table = stream.groupByKey().aggregate(
+        KTable<String, Long> table = inputStream.groupByKey().aggregate(
                 () -> 0L,
-                (s, value, aggregate) -> value + aggregate,
+                (key, value, aggregate) -> value + aggregate,
                 Materialized.as("store")
         );
 
-        KStream<String, String> joined = stream
+        KStream<String, String> joined = inputStream
                 .join(table, (value, aggregate) -> value + "," + aggregate);
 
         joined.to(OUTPUT_TOPIC, Produced.with(Serdes.String(), Serdes.String()));
